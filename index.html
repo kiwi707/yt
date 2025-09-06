@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>快递面单（100×180mm · 1:1模板）</title>
+  <!-- 依赖：条形码、二维码、HTML→图片、PDF -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-to-image/dist/html-to-image.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root{ --scale: 3.6; }
+    *{box-sizing:border-box}
+    body{margin:0;background:#f6f7f8;font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:#111}
+    h1{font-size:20px;margin:16px}
+    .grid{display:grid;grid-template-columns:420px 1fr;gap:16px;padding:16px}
+
+    .panel{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+    .panel h2{margin:0;padding:12px 14px;border-bottom:1px solid #eee;font-size:16px}
+    .panel .body{padding:12px 14px}
+    label{display:block;font-size:12px;margin-top:10px}
+    input,textarea{width:100%;margin-top:6px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{border:none;border-radius:999px;background:#111;color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}
+    button.ghost{background:#fff;color:#111;border:1px solid #111}
+
+    /* 面单预览（尺寸按 100×180mm 比例缩放） */
+    .preview{display:flex;justify-content:center;padding:14px}
+    .label{position:relative;background:#fff;width:calc(100 * var(--scale) * 1px / 1.06);height:calc(180 * var(--scale) * 1px / 1.06);border:1px solid #dcdfe3;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .sec{padding:8px 10px;border-bottom:1px solid #e5e7eb}
+    .flex{display:flex;align-items:center;justify-content:space-between}
+    .small{font-size:10px;color:#6b7280}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* 调整：把快件 badge 的尺寸和位置缩小，避免遮挡下方条码/单号 */
+    .badge-right{position:absolute;top:8px;right:8px;background:#111;color:#fff;width:48px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:800;border-bottom-left-radius:8px;font-size:12px}
+
+    /* 顶部 sec 最小高度，保证 badge 不会溢出并遮挡下方内容 */
+    .top-sec{min-height:56px}
+
+    .bar-thick{height:6px;background:#111;margin:0}
+    .bigcode{font-size:28px;font-weight:900;letter-spacing:2px;text-align:center;margin:6px 0}
+    svg.bartop{width:100%;height:20px}
+
+    .tag{font-size:12px;color:#111}
+    .line{height:1px;background:#e5e7eb;margin:4px -10px}
+
+    .chip{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:700}
+    .chip.recv{background:#111;color:#fff}
+    .chip.send{background:#e5e7eb;color:#111}
+    .info{font-size:12px;line-height:1.35}
+
+    svg.barmid{width:100%;height:58px}
+
+    .grid-qr{display:grid;grid-template-columns:110px 96px 1fr;gap:10px;align-items:start}
+    .qrbox{width:96px;height:96px;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center}
+
+    .brand-row{display:flex;align-items:center;gap:8px}
+
+    /* 页脚 */
+    .footer{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:6px 10px}
+    .footer .cell{flex:1}
+    .foot-right{background:#eee;padding:6px 10px;border-top-left-radius:8px;font-weight:800}
+
+    @media print{
+      body{background:#fff}
+      .grid{display:block;padding:0}
+      .panel:first-child{display:none}
+      .label{box-shadow:none;border:none;border-radius:0;width:100mm;height:180mm}
+      .sec{border-color:#bdbec2}
+    }
+  </style>
+</head>
+<body>
+  <h1>快递面单（1:1 固定模板）</h1>
+  <div class="grid">
+    <div class="panel">
+      <h2>填写信息</h2>
+      <div class="body">
+        <div class="row">
+          <label>分拣大码
+            <input id="bigCode" value="300-150-00-206" />
+          </label>
+          <label>运单号（Code128）
+            <input id="waybill" value="899932564553" />
+          </label>
+        </div>
+        <div class="row">
+          <label>区域件标识
+            <input id="areaTag" value="区域件" />
+          </label>
+          <label>订单号
+            <input id="orderId" value="10323754" />
+          </label>
+        </div>
+
+        <label>收件人姓名
+          <input id="receiverName" value="小公举" />
+        </label>
+        <div class="row">
+          <label>收件人电话1
+            <input id="receiverPhone" value="888181811" />
+          </label>
+          <label>收件人电话2
+            <input id="receiverPhone2" value="172723112" />
+          </label>
+        </div>
+        <label>收件地址
+          <textarea id="receiverAddr" rows="2">上海市嘉定区万达广场3号写字楼</textarea>
+        </label>
+
+        <label>寄件人姓名
+          <input id="senderName" value="雷" />
+        </label>
+        <label>寄件人电话
+          <input id="senderPhone" value="0595" />
+        </label>
+        <label>寄件地址
+          <textarea id="senderAddr" rows="2">晋江市跨境电商园区仓配中心</textarea>
+        </label>
+
+        <label>备注
+          <textarea id="note" rows="3">药托秒变空姐，测试商品*3</textarea>
+        </label>
+
+        <div class="btns">
+          <button onclick="updateAll()">更新预览</button>
+          <button class="ghost" onclick="exportPNG()">导出 PNG</button>
+          <button class="ghost" onclick="exportPDF()">导出 PDF</button>
+          <button class="ghost" onclick="window.print()">直接打印</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>1:1 预览</h2>
+      <div class="body preview">
+        <div id="label" class="label">
+          <!-- 顶部品牌条（保留文字，去掉圆点 logo） -->
+          <div class="sec top-sec" style="position:relative;padding:8px 10px 6px 10px">
+            <div class="brand">
+              <div>
+                <div style="font-weight:800;line-height:1">YTO 圆通速递</div>
+                <div class="small">EXPRESS</div>
+              </div>
+            </div>
+            <div class="badge-right"><div>快件</div><div>快件</div></div>
+          </div>
+
+          <!-- 大码条 -->
+          <div class="bar-thick"></div>
+          <div class="sec" style="padding:6px 10px">
+            <div id="bigCodeText" class="bigcode">300-150-00-206</div>
+            <svg id="barcodeTop" class="bartop"></svg>
+          </div>
+          <div class="bar-thick"></div>
+
+          <!-- 区域件 + 收/寄信息（上半） -->
+          <div class="sec" style="padding:8px 10px 10px 10px">
+            <div class="tag" id="areaTagText">区域件</div>
+            <div class="line"></div>
+            <div class="info" style="display:flex;gap:8px;margin-top:6px">
+              <span class="chip recv">收</span>
+              <div id="recvLine">小公举 888181811 172723112<br/>上海市嘉定区万达广场3号写字楼</div>
+            </div>
+            <div class="line" style="margin-top:6px"></div>
+            <div class="info" style="display:flex;gap:8px;margin-top:6px">
+              <span class="chip send">寄</span>
+              <div id="sendLine">雷 0595<br/>晋江市跨境电商园区仓配中心</div>
+            </div>
+          </div>
+
+          <!-- 中段大条码（带数字） -->
+          <div class="sec" style="padding:6px 10px">
+            <svg id="barcodeMid" class="barmid"></svg>
+          </div>
+
+          <!-- 时间 + 二维码 + 文案区域 -->
+          <div class="sec" style="padding:10px">
+            <div class="grid-qr">
+              <div class="small">
+                <div id="timeBox" class="mono">2019-08-18 22:27:09</div>
+                <div style="margin-top:2px">打印时间</div>
+              </div>
+              <div class="qrbox"><canvas id="qrCanvas" width="96" height="96"></canvas></div>
+              <div class="small" style="line-height:1.35;color:#444">
+                如出现未妥投、改址、改收件人、改付款方式等异常情形（非不可抗力），请您第一时间联系商家或快递公司客服处理。感谢您的支持，祝您购物愉快。
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部第二联（保留文字，去掉圆点 logo） -->
+          <div class="sec" style="padding:10px">
+            <div class="brand-row">
+              <div style="font-weight:700">YTO 圆通速递</div>
+            </div>
+            <div class="line" style="margin-top:6px"></div>
+            <div class="info" style="display:flex;gap:8px;margin-top:6px">
+              <span class="chip recv">收</span>
+              <div id="recvLine2">小公举 888181811 172723112<br/>上海市嘉定区万达广场3号写字楼</div>
+            </div>
+            <div class="line" style="margin-top:6px"></div>
+            <div class="info" style="display:flex;gap:8px;margin-top:6px">
+              <span class="chip send">寄</span>
+              <div id="sendLine2">雷 0595<br/>晋江市跨境电商园区仓配中心</div>
+            </div>
+            <div class="line" style="margin-top:6px"></div>
+            <div class="small" id="noteText" style="margin-top:6px">药托秒变空姐，测试商品*3</div>
+          </div>
+
+          <!-- 页脚（订单号 + 右侧联次编号） -->
+          <div class="footer">
+            <div class="cell">订单号：<span id="orderIdText" class="mono">10323754</span></div>
+            <div class="foot-right" id="sheetNo">1811</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const $ = (id)=>document.getElementById(id);
+  const pad = (n)=>String(n).padStart(2,'0');
+  function nowFmt(){ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` }
+
+  function renderTexts(){
+    const rn=$('receiverName').value.trim();
+    const rp1=$('receiverPhone').value.trim();
+    const rp2=$('receiverPhone2').value.trim();
+    const ra=$('receiverAddr').value.trim();
+    const sn=$('senderName').value.trim();
+    const sp=$('senderPhone').value.trim();
+    const sa=$('senderAddr').value.trim();
+    $('recvLine').innerHTML = `${rn} ${rp1} ${rp2}<br>${ra}`.replace(/\s+/g,' ').trim();
+    $('sendLine').innerHTML = `${sn} ${sp}<br>${sa}`.replace(/\s+/g,' ').trim();
+    $('recvLine2').innerHTML = $('recvLine').innerHTML;
+    $('sendLine2').innerHTML = $('sendLine').innerHTML;
+
+    $('bigCodeText').textContent = $('bigCode').value.trim();
+    $('areaTagText').textContent = $('areaTag').value.trim();
+    $('orderIdText').textContent = $('orderId').value.trim();
+    $('noteText').textContent = $('note').value;
+
+    const t = nowFmt();
+    $('timeBox').textContent = t;
+  }
+
+  function renderBarcodes(){
+    const bigDigits = $('bigCode').value.replace(/[^0-9]/g,'') || '0';
+    const waybill = $('waybill').value.trim() || '0';
+    try{
+      JsBarcode('#barcodeTop', bigDigits, {format:'CODE128',displayValue:false,margin:0,height:20});
+      JsBarcode('#barcodeMid', waybill, {format:'CODE128',displayValue:true,fontSize:14,margin:0,height:58});
+    }catch(e){ console.error(e); }
+  }
+
+  function renderQR(){
+    const wb = $('waybill').value.trim() || '0';
+    QRCode.toCanvas($('qrCanvas'), wb, { margin:0, width:96 });
+  }
+
+  function updateAll(){
+    renderTexts();
+    renderBarcodes();
+    renderQR();
+  }
+
+  async function exportPNG(){
+    const node = $('label');
+    const dataUrl = await htmlToImage.toPng(node, { pixelRatio: 3 });
+    const a=document.createElement('a'); a.href=dataUrl; a.download=`waybill-${$('waybill').value||'waybill'}.png`; a.click();
+  }
+
+  async function exportPDF(){
+    const node = $('label');
+    const dataUrl = await htmlToImage.toPng(node, { pixelRatio: 3 });
+    const { jsPDF } = window.jspdf; const mmToPt = mm=>mm*72/25.4;
+    const pdf = new jsPDF({orientation:'portrait',unit:'pt',format:[mmToPt(100), mmToPt(180)]});
+    pdf.addImage(dataUrl,'PNG',0,0,mmToPt(100),mmToPt(180));
+    pdf.save(`waybill-${$('waybill').value||'waybill'}.pdf`);
+  }
+
+  updateAll();
+</script>
+</body>
+</html>
