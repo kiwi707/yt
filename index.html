@@ -121,6 +121,11 @@
           <textarea id="senderAddr" rows="2">晋江市跨境电商园区仓配中心</textarea>
         </label>
 
+        <!-- 新增：打印时间输入框（优先使用，留空则使用当前时间） -->
+        <label>打印时间
+          <input id="printTime" value="" placeholder="2025-09-06 20:15:00" />
+        </label>
+
         <label>备注
           <textarea id="note" rows="3">药托秒变空姐，测试商品*3</textarea>
         </label>
@@ -243,8 +248,9 @@
     $('orderIdText').textContent = $('orderId').value.trim();
     $('noteText').textContent = $('note').value;
 
-    const t = nowFmt();
-    $('timeBox').textContent = t;
+    // 优先使用手动输入的打印时间，若为空则使用当前时间
+    const manual = ($('printTime') && $('printTime').value.trim()) || '';
+    $('timeBox').textContent = manual || nowFmt();
   }
 
   function renderBarcodes(){
